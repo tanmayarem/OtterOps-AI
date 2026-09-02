@@ -29,7 +29,7 @@ one char" logic correctly when the mismatch happened at the last position.
 
 **Resolution:** Rewrote as a two-phase check: (1) for same-length strings, count
 differing positions; (2) for length-diff-1 strings, use a sliding skip pointer
-(`_is_one_deletion`). Verified with8 unit tests covering substitution,
+(`_is_one_deletion`). Verified with 8 unit tests covering substitution,
 insertion, deletion, two-edit, completely different, and empty strings.
 
 ### Bug 3: Exception classifier double-counting bank rows
@@ -37,7 +37,7 @@ insertion, deletion, two-edit, completely different, and empty strings.
 The `classify_exceptions()` function was called with the full bank DataFrame as
 `all_bank`, which meant every bank row — including those already matched in
 passes 1 and 2 — was re-classified as a "bank exception." This produced 49
-exceptions instead of6.
+exceptions instead of 6.
 
 **Root cause:** The `fuzzy_match()` function returns `unmatched_bank` by
 subtracting `consumed_bank_idx` from the bank DataFrame. But `consumed_bank_idx`
@@ -70,11 +70,62 @@ at the cost of missing some legitimate matches. This is the conservative choice
 for a finance reconciliation system where false matches are worse than false
 exceptions.
 
-### Design tradeoff: Why57 matches instead of60
+### Design tradeoff: Why 57 matches instead of 60
 
 The 3 unmatched records are genuinely missing from the bank settlement file
-(模拟 stuck/failed settlements). The generator intentionally excludes them from
-`bank_settlement.csv` to simulate real-world settlement failures. The engine
-correctly identifies them as `MISSING_FROM_SETTLEMENT` exceptions. This is the
-"honest exception list" the track criteria require — we don't hide the3
+(simulating stuck/failed settlements). The generator intentionally excludes them
+from `bank_settlement.csv` to simulate real-world settlement failures. The
+engine correctly identifies them as `MISSING_FROM_SETTLEMENT` exceptions. This
+is the "honest exception list" the track criteria require — we don't hide the 3
 failures.
+
+---
+
+## 2026-09-02: LLM explainer integration and final pipeline run
+
+### Issue 5: Groq API key invalid — graceful fallback worked as designed
+
+During the final end-to-end pipeline run, the Groq API returned 401
+`AuthenticationError: Invalid API Key`. This was expected — the `.env` file
+contains a placeholder key.
+
+**What happened:** The explainer attempted 6 LLM calls (one per exception),
+each failed with 401, and each fell back to the mock explanation path. The
+pipeline completed successfully with 6/6 exceptions explained using
+template responses. No crash, no data loss.
+
+**Resolution:** None needed — this is the designed behavior. The mock
+fallback produces reasonable, structured explanations (e.g., "Payment was
+recorded internally but no bank settlement was found...") with appropriate
+confidence levels. When a valid Groq key is added to `.env`, the explainer
+will automatically use real LLM responses instead.
+
+**Note:** The stderr output shows the 401 errors as warnings, not exceptions.
+This is intentional — the log line `log.warning("LLM call failed...,
+falling back to mock")` makes the failure visible without being alarming.
+
+### Issue 6: Unicode rupee symbol breaks Windows console
+
+The `matcher.py` and `llm_explainer.py` used the rupee symbol in print
+statements and log messages. Windows console with cp1252 encoding cannot
+render this character, causing UnicodeEncodeError.
+
+**Resolution:** Replaced all rupee symbols with "INR" in Python files and
+logs. README.md keeps the symbol since GitHub renders it correctly in Markdown.
+
+### Design note: LLM only explains, never re-decides
+
+The architecture enforces a strict separation: the deterministic matcher
+(exact_match + fuzzy_match + classify_exceptions) produces all decisions.
+The LLM explainer reads exceptions.csv and adds human-readable explanations
+but never modifies match decisions, never re-runs matching, and never
+overrides exception classifications. This is stated in the llm_explainer.py
+docstring header and enforced by the code structure — the explainer has no
+access to the matching functions and no write path to matched_pairs.csv.
+
+This separation was a deliberate design choice for the hackathon submission.
+The track criteria emphasize "AI judgment — the right tool in the right
+place, and where you chose not to use one." By keeping matching
+deterministic and LLM-only for explanation, we demonstrate that we know
+when NOT to use AI (matching must be reproducible and auditable) and when
+AI adds value (explaining exceptions in natural language for human review).
