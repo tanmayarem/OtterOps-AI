@@ -389,6 +389,28 @@ def classify_exceptions(
 # ---------------------------------------------------------------------------
 # Console summary
 # ---------------------------------------------------------------------------
+CASH_POSITION_TOLERANCE = 50.0  # INR — flag if delta exceeds this
+
+
+def cash_position_check(matched: pd.DataFrame) -> dict:
+    """Compare sum of matched internal amounts vs bank amounts.
+
+    Returns a dict with the totals, delta, and whether it's within tolerance.
+    """
+    if matched.empty:
+        return {"internal_total": 0, "bank_total": 0, "delta": 0, "ok": True}
+
+    internal_total = matched["internal_amount"].sum()
+    bank_total = matched["bank_amount"].sum()
+    delta = abs(internal_total - bank_total)
+    return {
+        "internal_total": round(internal_total, 2),
+        "bank_total": round(bank_total, 2),
+        "delta": round(delta, 2),
+        "ok": delta <= CASH_POSITION_TOLERANCE,
+    }
+
+
 def print_summary(
     total_internal: int,
     total_bank: int,
@@ -398,6 +420,7 @@ def print_summary(
     """Print a human-readable reconciliation summary."""
     n_matched = len(matched)
     match_rate = (n_matched / total_internal * 100) if total_internal > 0 else 0
+    cash = cash_position_check(matched)
 
     print()
     print("=" * 65)
@@ -423,6 +446,15 @@ def print_summary(
         for code, count in exceptions["reason_code"].value_counts().items():
             print(f"    {code:<35s} : {count}")
         print()
+
+    # Cash position cross-check
+    print("  Cash Position Cross-Check:")
+    print(f"    Matched internal total : INR {cash['internal_total']:>12,.2f}")
+    print(f"    Matched bank total     : INR {cash['bank_total']:>12,.2f}")
+    print(f"    Delta                  : INR {cash['delta']:>12,.2f}")
+    status = "OK" if cash["ok"] else f"FLAGGED (exceeds INR {CASH_POSITION_TOLERANCE:.0f} tolerance)"
+    print(f"    Status                 : {status}")
+    print()
 
     print("=" * 65)
 
@@ -491,6 +523,18 @@ def reconcile(
             "amount_delta": 0,
             "date_lag_days": 0,
         })
+    # Cash position check — append as summary row
+    cash = cash_position_check(all_matched)
+    audit_rows.append({
+        "event_type": "cash_position_summary",
+        "internal_payment_id": "",
+        "bank_settlement_id": "",
+        "order_ref": "",
+        "match_type": f"delta=INR {cash['delta']:.2f}",
+        "amount_delta": cash["delta"],
+        "date_lag_days": 0,
+    })
+
     audit_df = pd.DataFrame(audit_rows)
 
     # --- Write outputs ---
