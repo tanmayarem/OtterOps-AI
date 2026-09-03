@@ -153,9 +153,27 @@ if matched is not None and not matched.empty and "match_type" in matched.columns
     with col_chart:
         match_counts = matched["match_type"].value_counts().reset_index()
         match_counts.columns = ["match_type", "count"]
-        # Accent-palette bar chart colors
+        # Altair chart with per-category accent colors
+        import altair as alt
         _chart_colors = ["#0fb5ba", "#1a9e96", "#268280", "#d48806", "#d4380d"]
-        st.bar_chart(match_counts.set_index("match_type"), color=_chart_colors)
+        chart = (
+            alt.Chart(match_counts)
+            .mark_bar()
+            .encode(
+                x=alt.X("match_type", sort=None, title=None),
+                y=alt.Y("count", title="Records"),
+                color=alt.Color(
+                    "match_type",
+                    scale=alt.Scale(
+                        domain=match_counts["match_type"].tolist(),
+                        range=_chart_colors,
+                    ),
+                    legend=None,
+                ),
+            )
+            .properties(height=300)
+        )
+        st.altair_chart(chart, use_container_width=True)
     with col_table:
         st.dataframe(
             match_counts.rename(columns={"count": "records"}),
