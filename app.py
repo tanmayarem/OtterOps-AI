@@ -36,11 +36,6 @@ def _format_inr(val: float) -> str:
     return f"INR {val:,.2f}"
 
 
-def _badge(text: str, color: str) -> str:
-    """Return a small colored badge using HTML."""
-    return f'<span style="background:{color};color:white;padding:2px 8px;border-radius:4px;font-size:0.8em;font-weight:600;">{text}</span>'
-
-
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
@@ -198,34 +193,42 @@ if exceptions is not None and not exceptions.empty:
 
     display_exc = exceptions.copy()
 
-    # Add manual review badge
-    def _review_badge(row):
+    # Add plain-text review label (color applied via Styler below)
+    def _review_label(row):
         conf = str(row.get("llm_confidence", "")).lower()
         notes = str(row.get("notes", "")).lower()
         if "manual review" in notes or conf == "low":
-            return _badge("REVIEW", "#e74c3c")
+            return "REVIEW"
         elif conf == "medium":
-            return _badge("MEDIUM", "#f39c12")
+            return "MEDIUM"
         else:
-            return _badge("HIGH", "#27ae60")
+            return "HIGH"
 
-    display_exc["review_flag"] = display_exc.apply(_review_badge, axis=1)
+    display_exc["review"] = display_exc.apply(_review_label, axis=1)
 
     # Columns to show
-    exc_cols = ["review_flag", "record_type", "order_ref", "payment_id", "settlement_id",
+    exc_cols = ["review", "record_type", "order_ref", "payment_id", "settlement_id",
                 "amount", "reason_code", "notes"]
     llm_cols = ["llm_explanation", "llm_confidence"]
     exc_cols_available = [c for c in exc_cols if c in display_exc.columns]
     llm_cols_available = [c for c in llm_cols if c in display_exc.columns]
 
-    # Render with HTML badges
+    # Color mapping for the review column
+    _badge_colors = {"REVIEW": "#e74c3c", "MEDIUM": "#f39c12", "HIGH": "#27ae60"}
+
+    def _color_review(val):
+        color = _badge_colors.get(str(val).upper(), "#888888")
+        return f"background-color: {color}; color: white; font-weight: 600"
+
     st.markdown("**Reason codes:** `MISSING_FROM_SETTLEMENT` | `DUPLICATE_SETTLEMENT` | "
                 "`AMOUNT_MISMATCH_UNRESOLVED` | `NO_MATCH_FOUND` | `MISSING_FROM_INTERNAL`")
 
     col_exc, col_llm = st.columns([1, 1])
     with col_exc:
         st.markdown("**Exception Details**")
-        st.dataframe(display_exc[exc_cols_available], use_container_width=True, height=300)
+        exc_df = display_exc[exc_cols_available]
+        styled_exc = exc_df.style.map(_color_review, subset=["review"]) if "review" in exc_df.columns else exc_df
+        st.dataframe(styled_exc, use_container_width=True, height=300)
     with col_llm:
         st.markdown("**LLM Explanations**")
         if llm_cols_available:

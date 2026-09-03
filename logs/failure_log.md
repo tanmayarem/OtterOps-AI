@@ -129,3 +129,42 @@ place, and where you chose not to use one." By keeping matching
 deterministic and LLM-only for explanation, we demonstrate that we know
 when NOT to use AI (matching must be reproducible and auditable) and when
 AI adds value (explaining exceptions in natural language for human review).
+
+---
+
+## 2026-09-03: Dashboard crash — DataFrame truth-value ambiguity
+
+### Bug 7: `or` between two DataFrames crashes Streamlit
+
+`app.py` line 103:
+```python
+exceptions = _load_csv(EXPLAINED_PATH) or _load_csv(EXCEPTIONS_PATH)
+```
+
+This raises `ValueError: The truth value of a DataFrame is ambiguous` on
+every Streamlit run. Python's `or` operator calls `bool()` on the left
+operand to decide whether to short-circuit. `bool(pd.DataFrame(...))`
+raises ValueError because a DataFrame with multiple rows has no single
+boolean value.
+
+The bug was silent in pytest because the tests never execute `app.py`
+directly — they test `matcher.py` and `llm_explainer.py` in isolation.
+The dashboard was only tested via manual `streamlit run` after this point.
+
+**Resolution:** Replaced `or` with an explicit `if/else` that checks
+`Path.exists()` on the explained file first, falling back to the raw
+exceptions file:
+```python
+if EXPLAINED_PATH.exists():
+    exceptions = _load_csv(EXPLAINED_PATH)
+else:
+    exceptions = _load_csv(EXCEPTIONS_PATH)
+```
+
+A full AST scan of `app.py` confirmed this was the only instance of this
+pattern — all other DataFrame checks already used `is not None and not
+df.empty`.
+
+**Verification:** Streamlit app launched successfully (HTTP 200) in both
+states: with existing output files, and with empty outputs/ directory
+(shows "Click Run Reconciliation" message). 34/34 tests still pass.
