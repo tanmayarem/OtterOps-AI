@@ -168,3 +168,81 @@ df.empty`.
 **Verification:** Streamlit app launched successfully (HTTP 200) in both
 states: with existing output files, and with empty outputs/ directory
 (shows "Click Run Reconciliation" message). 34/34 tests still pass.
+
+---
+
+## 2026-09-03: Dashboard visual bugs — raw HTML and chart color mismatch
+
+### Bug 8: review_flag column shows raw HTML as literal text
+
+The Exception Details table used an HTML `<span>` badge for the review
+column:
+```python
+def _review_badge(row):
+    return f'<span style="background:{color};...">{label}</span>'
+
+display_exc["review_flag"] = display_exc.apply(_review_badge, axis=1)
+st.dataframe(display_exc[exc_cols], ...)
+```
+
+`st.dataframe()` renders cell values as plain text — it does not parse HTML.
+The result was literal `<span style="background:#f39c12...">` text visible
+in every cell, which looked broken during a demo.
+
+**Root cause:** Assuming `st.dataframe()` renders HTML like `st.markdown(unsafe_allow_html=True)`.
+It does not. Streamlit's dataframe component uses a plain-text renderer.
+
+**Resolution:** Replaced the HTML badge with a plain-text label (`"REVIEW"`,
+`"MEDIUM"`, "HIGH") plus a pandas `Styler` that applies `background-color`
+CSS via `.map()`. `st.dataframe()` *does* render Styler CSS, so the cells
+now show colored backgrounds with white text. No HTML strings in cell values.
+
+A full scan of `app.py` confirmed no other tables (Matched Pairs, LLM
+Explanations, Audit Log, Match Type Breakdown) had raw HTML in cell values.
+
+### Bug 9: st.bar_chart color-list length mismatch
+
+After adding theme colors, the bar chart was wrapped with:
+```python
+st.bar_chart(match_counts.set_index("match_type"), color=_chart_colors)
+```
+
+This crashed with `StreamlitAPIException: colors list length must match
+columns list length`. After `.set_index("match_type")`, the DataFrame has
+one column (`count`), but `_chart_colors` has 5 entries. Streamlit's
+`color` parameter expects one color per *data column*, not one per *category*.
+
+**Root cause:** `st.bar_chart` cannot color individual bars by category. It
+colors by series/column, which is a fundamentally different semantic. There
+is no way to pass 5 category-level colors to a single-column bar chart.
+
+**Resolution:** Replaced with an Altair chart that supports per-category
+coloring via `alt.Color` + `alt.Scale(domain, range)`:
+```python
+import altair as alt
+chart = alt.Chart(match_counts).mark_bar().encode(
+    x=alt.X("match_type", sort=None),
+    y="count",
+    color=alt.Color("match_type", scale=alt.Scale(
+        domain=match_counts["match_type"].tolist(),
+        range=_chart_colors
+    ), legend=None),
+).properties(height=300)
+st.altair_chart(chart, use_container_width=True)
+```
+
+Added `altair>=5.0.0` to `requirements.txt` (was already installed as a
+Streamlit dependency). The chart now renders 5 differently-colored bars
+using the fintech accent palette (teal gradient for exact/fee/lag types,
+amber for fuzzy_lag_T+2, deep orange for fuzzy_typo).
+
+### Severity color swap
+
+The initial badge colors had HIGH=teal (calm) and MEDIUM=amber (warm),
+which inverted the expected visual severity scale. Swapped so severity
+escalates toward warm/red:
+- REVIEW = `#d4380d` (deep red) — most urgent, needs manual review
+- HIGH = `#d48806` (amber) — second most visually urgent
+- MEDIUM = `#0fb5ba` (teal) — calm, least alarming
+
+This follows the universal convention: red > amber > green/teal for severity.

@@ -236,8 +236,8 @@ if exceptions is not None and not exceptions.empty:
     exc_cols_available = [c for c in exc_cols if c in display_exc.columns]
     llm_cols_available = [c for c in llm_cols if c in display_exc.columns]
 
-    # Color mapping for the review column — teal palette from theme
-    _badge_colors = {"REVIEW": "#d4380d", "MEDIUM": "#d48806", "HIGH": "#0fb5ba"}
+    # Severity escalates toward warm/red: REVIEW=red, HIGH=amber (urgent), MEDIUM=teal (calm)
+    _badge_colors = {"REVIEW": "#d4380d", "HIGH": "#d48806", "MEDIUM": "#0fb5ba"}
 
     def _color_review(val):
         color = _badge_colors.get(str(val).upper(), "#555555")

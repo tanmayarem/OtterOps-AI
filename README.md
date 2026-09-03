@@ -7,6 +7,33 @@ internal payment records against bank settlement data across a 60-record batch,
 reports match rate, produces an honest exception list, and explains each
 exception using an LLM — without letting the LLM re-decide any match.
 
+## Design philosophy
+
+- **Deterministic matching over LLM matching.** The two-pass matcher (exact
+  then fuzzy) is fully deterministic — same inputs always produce same outputs.
+  A finance controller that gives different results on the same data is
+  untrustworthy. We use no randomness, no temperature, no sampling in the
+  matching path.
+
+- **LLM explains, never decides.** The LLM is the ONLY AI in the pipeline,
+  and its only job is to generate natural-language explanations for exceptions
+  the matcher already classified. It never modifies `matched_pairs.csv`, never
+  re-runs matching, never overrides a reason code. This is the "right tool in
+  the right place" the track criteria ask for — and knowing when NOT to use AI
+  is part of that judgment.
+
+- **No auth, no multi-tenant scope.** This is a hackathon demo running against
+  synthetic data. Adding authentication, RBAC, or tenant isolation would be
+  engineering for a deployment that doesn't exist yet. The `.env` file holds a
+  single Groq API key; the app serves one user at localhost:8505.
+
+- **Cash position check exists because reconciliation without it is
+  incomplete.** Matching records one-by-one tells you *which* transactions
+  reconciled. The cash position cross-check tells you whether the *totals*
+  agree — which is what an actual finance controller cares about. The INR
+  1,675.27 delta is flagged because it exceeds the INR 50 tolerance, and the
+  dashboard explains why (gateway fees + rounding differences).
+
 ## What it does
 
 1. **Generates** 60 synthetic Razorpay-style payment records with realistic INR amounts (INR 199–INR 45,000)
@@ -26,7 +53,7 @@ exception using an LLM — without letting the LLM re-decide any match.
 | Rounding difference       | 2     | Paise-level diff (< INR 0.50)            |
 | Missing from settlement   | 3     | Payment made but never settled           |
 
-## Results
+## Results (fresh run, seed=42)
 
 | Metric                              | Value  |
 |-------------------------------------|--------|
@@ -65,6 +92,41 @@ The delta exists because 3 gateway-fee records and 2 rounding-diff records have
 bank amounts lower than the internal amounts. These are expected operational
 differences, not errors — the engine correctly matched and tagged them.
 
+## How to run
+
+```bash
+# 1. Clone and enter the repo
+git clone <repo-url> && cd finance-controller
+
+# 2. Create a virtual environment and install dependencies
+python -m venv .venv
+.venv/Scripts/activate          # Windows
+# source .venv/bin/activate    # macOS/Linux
+pip install -r requirements.txt
+
+# 3. Generate synthetic data
+python -m data.generate_data
+
+# 4. Run the deterministic matcher
+python -m src.matcher
+
+# 5. (Optional) Run the LLM explainer — needs a Groq API key in .env
+#    Without a key, it falls back to mock explanations automatically
+python -m src.llm_explainer
+
+# 6. Launch the dashboard
+streamlit run app.py
+# Opens at http://localhost:8505
+
+# 7. Run tests (34 tests)
+pytest tests/ -v
+```
+
+**Without an API key:** Steps 1–4 and 6–7 work fully. The matcher is
+independent of any API. Step 5 falls back to deterministic mock explanations.
+To get real LLM explanations, add `GROQ_API_KEY=your_key` to `.env` (free key
+at https://console.groq.com/keys).
+
 ## Architecture
 
 ### Deterministic matching engine (no LLM)
@@ -91,13 +153,6 @@ This separation is intentional and stated explicitly in the code:
 > "This module explains exceptions already classified by the deterministic
 > matcher. It does not resolve, re-match, or override any matching decision."
 
-**Why this design?** The track criteria ask for "AI judgment — the right tool
-in the right place, and where you chose not to use one." Matching must be
-reproducible and auditable — a finance controller that gives different results
-on the same data is untrustworthy. LLMs add genuine value when explaining
-*why* an exception occurred in natural language for human review, but they
-should never be the source of truth for whether two records match.
-
 **Graceful degradation:** If no Groq API key is configured (or the API call
 fails), the explainer falls back to deterministic mock explanations based on
 the reason code. The pipeline never crashes without an API key.
@@ -107,35 +162,12 @@ the reason code. The pipeline never crashes without an API key.
 The dashboard loads existing output CSVs (or runs the full pipeline on demand)
 and displays:
 - Top metrics row: match rate, matched count, exceptions, cash position delta
+- Altair bar chart of match type breakdown (5-color accent palette)
 - Filterable matched pairs table (by match type)
 - Exceptions table with LLM explanations and confidence levels
-- Manual review badges (red for low confidence, amber for medium, green for high)
+- Severity badges (red for manual review, amber for high, teal for medium)
 - Cash position cross-check detail
 - Downloadable audit log
-
-## Quick start
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Generate sample data
-python -m data.generate_data
-
-# Run reconciliation (matcher + LLM explainer)
-python -m src.matcher
-python -m src.llm_explainer
-
-# Run tests (34 tests)
-pytest tests/ -v
-
-# Launch dashboard
-streamlit run app.py
-```
-
-**Without an API key:** The pipeline runs in mock mode — matcher is fully
-functional, LLM explanations use template responses. Add a Groq key to
-`.env` for real LLM explanations.
 
 ## Project structure
 
@@ -156,6 +188,8 @@ finance-controller/
 │   └── test_llm_explainer.py  # 14 tests: mock, API failure, context building, parsing
 ├── logs/
 │   └── failure_log.md         # Debugging and design tradeoff notes
+├── .streamlit/
+│   └── config.toml            # Dark fintech theme (navy bg, teal accent)
 ├── app.py                     # Streamlit dashboard
 ├── requirements.txt
 ├── .env                       # API keys (gitignored)
@@ -171,4 +205,4 @@ finance-controller/
 - **Custom Levenshtein**: Lightweight O(n) edit-distance-1 check, no external dependency
 - **Cash position cross-check**: Reports delta between matched internal and bank totals, flags if > INR 50
 - **Honest reporting**: All 6 exceptions are real, not cherry-picked — 3 genuinely stuck settlements + 3 duplicate bank rows
-- **LLM explains, never decides**: The matcher is deterministic and reproducible. The LLM only generates natural-language explanations for exceptions — it never modifies match decisions. This is the "right tool in the right place" the track criteria ask for.
+- **LLM explains, never decides**: The matcher is deterministic and reproducible. The LLM only generates natural-language explanations for exceptions — it never modifies match decisions.
