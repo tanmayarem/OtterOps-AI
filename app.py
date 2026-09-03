@@ -100,7 +100,13 @@ if run_button:
 # Load existing outputs (works whether we just ran or files pre-existed)
 # ---------------------------------------------------------------------------
 matched = _load_csv(MATCHED_PATH)
-exceptions = _load_csv(EXPLAINED_PATH) or _load_csv(EXCEPTIONS_PATH)
+
+# Prefer explained exceptions (has LLM columns); fall back to raw exceptions
+if EXPLAINED_PATH.exists():
+    exceptions = _load_csv(EXPLAINED_PATH)
+else:
+    exceptions = _load_csv(EXCEPTIONS_PATH)
+
 audit = _load_csv(AUDIT_PATH)
 internal_raw = _load_csv(INTERNAL_PATH)
 bank_raw = _load_csv(BANK_PATH)
