@@ -146,13 +146,16 @@ m5.metric("Bank Rows", total_bank)
 # ---------------------------------------------------------------------------
 # Match type breakdown
 # ---------------------------------------------------------------------------
+st.divider()
 if matched is not None and not matched.empty and "match_type" in matched.columns:
     st.subheader("Match Type Breakdown")
     col_chart, col_table = st.columns([1, 1])
     with col_chart:
         match_counts = matched["match_type"].value_counts().reset_index()
         match_counts.columns = ["match_type", "count"]
-        st.bar_chart(match_counts.set_index("match_type"))
+        # Accent-palette bar chart colors
+        _chart_colors = ["#0fb5ba", "#1a9e96", "#268280", "#d48806", "#d4380d"]
+        st.bar_chart(match_counts.set_index("match_type"), color=_chart_colors)
     with col_table:
         st.dataframe(
             match_counts.rename(columns={"count": "records"}),
@@ -163,6 +166,7 @@ if matched is not None and not matched.empty and "match_type" in matched.columns
 # ---------------------------------------------------------------------------
 # Matched Pairs table (filterable)
 # ---------------------------------------------------------------------------
+st.divider()
 if matched is not None and not matched.empty:
     st.subheader("Matched Pairs")
 
@@ -188,6 +192,7 @@ if matched is not None and not matched.empty:
 # ---------------------------------------------------------------------------
 # Exceptions table with LLM explanations
 # ---------------------------------------------------------------------------
+st.divider()
 if exceptions is not None and not exceptions.empty:
     st.subheader("Exceptions")
 
@@ -213,12 +218,12 @@ if exceptions is not None and not exceptions.empty:
     exc_cols_available = [c for c in exc_cols if c in display_exc.columns]
     llm_cols_available = [c for c in llm_cols if c in display_exc.columns]
 
-    # Color mapping for the review column
-    _badge_colors = {"REVIEW": "#e74c3c", "MEDIUM": "#f39c12", "HIGH": "#27ae60"}
+    # Color mapping for the review column — teal palette from theme
+    _badge_colors = {"REVIEW": "#d4380d", "MEDIUM": "#d48806", "HIGH": "#0fb5ba"}
 
     def _color_review(val):
-        color = _badge_colors.get(str(val).upper(), "#888888")
-        return f"background-color: {color}; color: white; font-weight: 600"
+        color = _badge_colors.get(str(val).upper(), "#555555")
+        return f"background-color: {color}; color: white; font-weight: 600; border-radius: 4px"
 
     st.markdown("**Reason codes:** `MISSING_FROM_SETTLEMENT` | `DUPLICATE_SETTLEMENT` | "
                 "`AMOUNT_MISMATCH_UNRESOLVED` | `NO_MATCH_FOUND` | `MISSING_FROM_INTERNAL`")
@@ -257,6 +262,7 @@ if matched is not None and not matched.empty and "internal_amount" in matched.co
 # ---------------------------------------------------------------------------
 # Audit Log + Download
 # ---------------------------------------------------------------------------
+st.divider()
 if audit is not None and not audit.empty:
     st.subheader("Audit Log")
     with st.expander("View full audit log"):
