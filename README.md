@@ -41,6 +41,7 @@ exception using an LLM — without letting the LLM re-decide any match.
 3. **Matches** payments in two passes (exact → fuzzy fallback with fee/lag/typo tolerance)
 4. **Explains** each exception using an LLM (Groq / llama-3.3-70b-versatile), with graceful mock fallback when no API key is configured
 5. **Visualises** results via a Streamlit dashboard with match-rate charts, exception drill-down, and cash position display
+6. **Answers questions** about the reconciliation results via a read-only Q&A layer (uses LLM, grounded in existing data only)
 
 ### Injected bank messiness (ground truth via `_mutation` column)
 
@@ -118,7 +119,7 @@ python -m src.llm_explainer
 streamlit run app.py
 # Opens at http://localhost:8505
 
-# 7. Run tests (34 tests)
+# 7. Run tests (49 tests)
 pytest tests/ -v
 ```
 
@@ -141,7 +142,7 @@ at https://console.groq.com/keys).
 `MISSING_FROM_SETTLEMENT`, `NO_MATCH_FOUND`, `AMOUNT_MISMATCH_UNRESOLVED`,
 `DUPLICATE_SETTLEMENT`, `MISSING_FROM_INTERNAL`
 
-### LLM exception explainer (the ONLY AI in the pipeline)
+### LLM exception explainer
 
 After the deterministic matcher finishes, the LLM explainer reads
 `exceptions.csv` and generates human-readable explanations for each
@@ -156,6 +157,24 @@ This separation is intentional and stated explicitly in the code:
 **Graceful degradation:** If no Groq API key is configured (or the API call
 fails), the explainer falls back to deterministic mock explanations based on
 the reason code. The pipeline never crashes without an API key.
+
+### Read-only Q&A layer (src/qa_agent.py)
+
+A bounded, single-question-single-answer Q&A feature on top of the
+reconciliation output. It answers questions like "Why wasn't ORD10254
+matched?" by retrieving relevant records from the existing CSVs and
+sending them (plus the question) to the LLM.
+
+**Key constraints:**
+- Only reads from `matched_pairs.csv` and `exceptions_explained.csv` — never
+  re-runs matching, never modifies any output file
+- If the question contains an order_ref or payment_id, it pulls that
+  specific row as context. Otherwise it passes a compact summary.
+- Falls back to mock answers when no API key is configured
+- Rejects non-finance questions explicitly
+
+This is explicitly an optional, read-only convenience layer — not a new
+agent, not a new decision engine.
 
 ### Streamlit dashboard
 
@@ -177,7 +196,8 @@ finance-controller/
 │   └── generate_data.py       # Synthetic data generator with injectable messiness
 ├── src/
 │   ├── matcher.py             # Core two-pass reconciliation engine (deterministic)
-│   └── llm_explainer.py       # LLM exception explanations (Groq, with mock fallback)
+│   ├── llm_explainer.py       # LLM exception explanations (Groq, with mock fallback)
+│   └── qa_agent.py            # Read-only Q&A over reconciliation output
 ├── outputs/
 │   ├── matched_pairs.csv      # 57 matched records with match_type & tolerance
 │   ├── exceptions.csv         # 6 exceptions with reason codes
@@ -185,7 +205,8 @@ finance-controller/
 │   └── audit_log.csv          # Full audit trail + cash position summary
 ├── tests/
 │   ├── test_matcher.py        # 20 tests: edit distance, exact, fuzzy, exceptions, pipeline
-│   └── test_llm_explainer.py  # 14 tests: mock, API failure, context building, parsing
+│   ├── test_llm_explainer.py  # 14 tests: mock, API failure, context building, parsing
+│   └── test_qa_agent.py       # 15 tests: ID extraction, context retrieval, mock fallback, no side effects
 ├── logs/
 │   └── failure_log.md         # Debugging and design tradeoff notes
 ├── .streamlit/
@@ -198,6 +219,10 @@ finance-controller/
 ```
 
 ## Design decisions
+
+- **QA agent is read-only**: It answers questions about existing results, it
+  does not perform new reconciliation. The system prompt explicitly rejects
+  non-finance questions and instructs the model to never invent numbers.
 
 - **Deterministic generation**: `random.seed(42)` ensures reproducible test data
 - **Mutation tagging**: Bank CSV includes `_mutation` column for ground-truth auditability

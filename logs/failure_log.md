@@ -243,6 +243,40 @@ which inverted the expected visual severity scale. Swapped so severity
 escalates toward warm/red:
 - REVIEW = `#d4380d` (deep red) — most urgent, needs manual review
 - HIGH = `#d48806` (amber) — second most visually urgent
-- MEDIUM = `#0fb5ba` (teal) — calm, least alarming
+- MEDIUM = `#0fb5ba` (teal) — calm, least alarmingThis follows the universal convention: red > amber > green/teal for severity.
 
-This follows the universal convention: red > amber > green/teal for severity.
+---
+
+## 2026-09-05: Q&A agent — read-only layer over reconciliation output
+
+### Design note: Read-only Q&A as optional convenience
+
+Added `src/qa_agent.py` as a bounded Q&A feature: single-question,
+single-answer, no conversation memory, no multi-turn context. The module
+loads existing reconciliation CSVs, uses keyword/ID matching to find
+relevant records, and sends them to the LLM with a strict system prompt.
+
+**Key design constraints:**
+- Reads ONLY from `matched_pairs.csv` and `exceptions_explained.csv`
+- Never re-runs matching, never modifies any output file
+- Falls back to mock answers when no API key is configured
+- Rejects non-finance questions explicitly via system prompt
+- Test suite confirms the module never writes to any file
+
+This was added as a natural "ask questions about your data" feature for
+the demo — judges can type a question and see grounded answers rather than
+just reading tables. It maps to the track's "Settlement Q&A agent"
+direction, but deliberately scoped to existing data only.
+
+### Bug 10: Test failures from None paths and case sensitivity
+
+Initial test suite had 4 failures:
+1. `_extract_ids()` returned lowercase `ord10254` but test expected
+   uppercase `ORD10254` — fixed by uppercasing extracted IDs.
+2. `answer_question()` with `matched_path=None` crashed in `_load_outputs()`
+   because `Path(None)` raises TypeError — fixed by adding None guards.
+3. LLM-called test passed None paths resulting in empty DataFrames, which
+   triggered the early return before the LLM call — fixed by using temp
+   CSV files with real data.
+
+All 49 tests pass after fixes.

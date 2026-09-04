@@ -261,6 +261,39 @@ if exceptions is not None and not exceptions.empty:
             st.info("No LLM explanations available. Run the pipeline to generate them.")
 
 # ---------------------------------------------------------------------------
+# Ask About This Reconciliation
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader("Ask About This Reconciliation")
+st.caption(
+    "Type a question about the reconciliation results. "
+    "Try: \"Why wasn't ORD10254 matched?\" or \"How many exceptions are duplicates?\""
+)
+
+qa_question = st.text_input(
+    "Your question",
+    placeholder="e.g. Why wasn't ORD10254 matched?",
+    key="qa_input",
+)
+
+if qa_question:
+    with st.spinner("Searching reconciliation data..."):
+        from src.qa_agent import answer_question
+
+        qa_answer, context_ids = answer_question(
+            qa_question,
+            str(MATCHED_PATH),
+            str(EXPLAINED_PATH),
+            str(EXCEPTIONS_PATH),
+        )
+
+    st.markdown(f"**Answer:** {qa_answer}")
+    if context_ids:
+        st.caption(f"Referenced IDs: {', '.join(context_ids)}")
+    else:
+        st.caption("Context: full reconciliation summary")
+
+# ---------------------------------------------------------------------------
 # Cash Position Cross-Check (expanded detail)
 # ---------------------------------------------------------------------------
 if matched is not None and not matched.empty and "internal_amount" in matched.columns:
