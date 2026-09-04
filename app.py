@@ -49,7 +49,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.caption(
-    "**AI Finance Controller, **  A payment gateway settlement reconciliation. "
+    "**AI Finance Controller,**  A payment gateway settlement reconciliation. "
     "Deterministic two-pass matcher with LLM-powered exception explanations."
 )
 
