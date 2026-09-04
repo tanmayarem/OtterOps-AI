@@ -154,6 +154,31 @@ def _extract_ids(question: str, data: dict) -> list[str]:
     return found
 
 
+def _ids_exist_in_data(ids: list[str], data: dict) -> bool:
+    """Check whether any of the extracted IDs actually appear in the loaded data."""
+    if not ids:
+        return False
+
+    id_set = {i.upper() for i in ids}
+    mp = data.get("matched", pd.DataFrame())
+    exc = data.get("exceptions", pd.DataFrame())
+
+    def _has_id(row):
+        vals = [
+            str(row.get("order_ref", "")).upper(),
+            str(row.get("payment_id", "")).upper(),
+            str(row.get("settlement_id", "")).upper(),
+            str(row.get("bank_order_ref", "")).upper(),
+        ]
+        return any(v in id_set for v in vals)
+
+    if not mp.empty and mp.apply(_has_id, axis=1).any():
+        return True
+    if not exc.empty and exc.apply(_has_id, axis=1).any():
+        return True
+    return False
+
+
 def _find_relevant_records(question: str, data: dict) -> str:
     """Find records relevant to the question and format as context string.
 
@@ -412,6 +437,15 @@ def answer_question(
 
     # Track which IDs were referenced
     ids = _extract_ids(question, data)
+
+    # Early exit: IDs extracted but not found in any loaded CSV
+    if ids and not _ids_exist_in_data(ids, data):
+        return (
+            f"I couldn't find {', '.join(ids)} in this reconciliation batch — "
+            "it may not be one of the records in this run. Try a different "
+            "order reference or check the Matched Pairs / Exceptions tables above.",
+            ids,
+        )
 
     # Build the full prompt
     full_prompt = f"QUESTION: {question}\n\nCONTEXT:\n{context_text}"
