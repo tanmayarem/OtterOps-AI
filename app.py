@@ -50,7 +50,6 @@ st.markdown(
 )
 st.caption(
     "**AI Finance Controller** — Payment gateway settlement reconciliation — "
-    "Razorpay Builtathon Track 04. "
     "Deterministic two-pass matcher with LLM-powered exception explanations."
 )
 
