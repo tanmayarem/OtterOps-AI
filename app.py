@@ -37,7 +37,7 @@ def _format_inr(val: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Header
+# Header — OtterOps AI branding
 # ---------------------------------------------------------------------------
 st.markdown(
     '<div style="display:flex;align-items:center;gap:12px;">'
@@ -153,7 +153,7 @@ m4.metric(
 m5.metric("Bank Rows", total_bank)
 
 # ---------------------------------------------------------------------------
-# Ask About This Reconciliation (early placement — visible without scrolling)
+# Ask About This Reconciliation — placed early, visible without scrolling
 # ---------------------------------------------------------------------------
 st.divider()
 st.subheader("Ask About This Reconciliation")
