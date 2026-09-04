@@ -421,7 +421,7 @@ def answer_question(
         were pulled as context (empty list if summary context was used).
     """
     api_key = api_key or os.getenv("GROQ_API_KEY")
-    model = model or os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    model = model or os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
     # Load data
     data = _load_outputs(matched_path, explained_path, exceptions_path)

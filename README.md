@@ -39,7 +39,7 @@ exception using an LLM — without letting the LLM re-decide any match.
 1. **Generates** 60 synthetic Razorpay-style payment records with realistic INR amounts (INR 199–INR 45,000)
 2. **Produces** a deliberately messy bank settlement file with 6 types of injected discrepancies
 3. **Matches** payments in two passes (exact → fuzzy fallback with fee/lag/typo tolerance)
-4. **Explains** each exception using an LLM (Groq / llama-3.3-70b-versatile), with graceful mock fallback when no API key is configured
+4. **Explains** each exception using an LLM (Groq / qwen/qwen3.8-27b), with graceful mock fallback when no API key is configured
 5. **Visualises** results via a Streamlit dashboard with match-rate charts, exception drill-down, and cash position display
 6. **Answers questions** about the reconciliation results via a read-only Q&A layer (uses LLM, grounded in existing data only)
 
