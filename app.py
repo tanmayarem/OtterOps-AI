@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 from pathlib import Path
 
-st.set_page_config(page_title="AI Finance Controller", layout="wide")
+st.set_page_config(page_title="OtterOps AI — Finance Controller", layout="wide")
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -39,9 +39,18 @@ def _format_inr(val: float) -> str:
 # ---------------------------------------------------------------------------
 # Header
 # ---------------------------------------------------------------------------
-st.title("AI Finance Controller")
+st.markdown(
+    '<div style="display:flex;align-items:center;gap:12px;">'
+    '<span style="font-size:2rem;background:#0fb5ba;color:#0e1117;border-radius:50%;'
+    'width:48px;height:48px;display:flex;align-items:center;justify-content:center;'
+    'font-weight:700;">🦦</span>'
+    '<span><span style="font-size:1.8rem;font-weight:700;color:#e6edf3;">OtterOps AI</span></span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 st.caption(
-    "Payment gateway settlement reconciliation — Razorpay Builtathon Track 04. "
+    "**AI Finance Controller** — Payment gateway settlement reconciliation — "
+    "Razorpay Builtathon Track 04. "
     "Deterministic two-pass matcher with LLM-powered exception explanations."
 )
 
@@ -142,6 +151,43 @@ m4.metric(
     delta_color="normal" if cash_ok else "off",
 )
 m5.metric("Bank Rows", total_bank)
+
+# ---------------------------------------------------------------------------
+# Ask About This Reconciliation (early placement — visible without scrolling)
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader("Ask About This Reconciliation")
+st.caption(
+    "Type a question about the reconciliation results. "
+    "Try: \"Why wasn't ORD10254 matched?\" or \"How many exceptions are duplicates?\""
+)
+
+qa_question = st.text_input(
+    "Your question",
+    placeholder="e.g. Why wasn't ORD10254 matched?",
+    key="qa_input",
+)
+
+if qa_question:
+    with st.spinner("Searching reconciliation data..."):
+        from src.qa_agent import answer_question
+        import os as _os
+
+        _groq_key = _os.getenv("GROQ_API_KEY", "")
+        _key_status = "LLM active" if _groq_key and len(_groq_key) > 20 else "Mock mode (no valid API key)"
+
+        qa_answer, context_ids = answer_question(
+            qa_question,
+            str(MATCHED_PATH),
+            str(EXPLAINED_PATH),
+            str(EXCEPTIONS_PATH),
+        )
+
+    st.markdown(f"**Answer:** {qa_answer}")
+    if context_ids:
+        st.caption(f"Referenced IDs: {', '.join(context_ids)}  ·  {_key_status}")
+    else:
+        st.caption(f"Context: full reconciliation summary  ·  {_key_status}")
 
 # ---------------------------------------------------------------------------
 # Match type breakdown
@@ -259,39 +305,6 @@ if exceptions is not None and not exceptions.empty:
                          use_container_width=True, height=300)
         else:
             st.info("No LLM explanations available. Run the pipeline to generate them.")
-
-# ---------------------------------------------------------------------------
-# Ask About This Reconciliation
-# ---------------------------------------------------------------------------
-st.divider()
-st.subheader("Ask About This Reconciliation")
-st.caption(
-    "Type a question about the reconciliation results. "
-    "Try: \"Why wasn't ORD10254 matched?\" or \"How many exceptions are duplicates?\""
-)
-
-qa_question = st.text_input(
-    "Your question",
-    placeholder="e.g. Why wasn't ORD10254 matched?",
-    key="qa_input",
-)
-
-if qa_question:
-    with st.spinner("Searching reconciliation data..."):
-        from src.qa_agent import answer_question
-
-        qa_answer, context_ids = answer_question(
-            qa_question,
-            str(MATCHED_PATH),
-            str(EXPLAINED_PATH),
-            str(EXCEPTIONS_PATH),
-        )
-
-    st.markdown(f"**Answer:** {qa_answer}")
-    if context_ids:
-        st.caption(f"Referenced IDs: {', '.join(context_ids)}")
-    else:
-        st.caption("Context: full reconciliation summary")
 
 # ---------------------------------------------------------------------------
 # Cash Position Cross-Check (expanded detail)

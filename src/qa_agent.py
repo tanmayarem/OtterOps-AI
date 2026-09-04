@@ -280,7 +280,7 @@ def _call_llm(prompt: str, api_key: str, model: str) -> str:
     return response.choices[0].message.content.strip()
 
 
-def _mock_answer(question: str, context: str) -> str:
+def _mock_answer(question: str, context: str, data: dict | None = None) -> str:
     """Generate a mock answer when no API key is available.
 
     Uses simple keyword matching to provide a reasonable response.
@@ -288,18 +288,48 @@ def _mock_answer(question: str, context: str) -> str:
     q_lower = question.lower()
 
     # Keywords that indicate a reconciliation-related question
+    # (narrow set — avoids false positives like "weather", "today")
     _recon_keywords = (
         "match", "exception", "settle", "payment", "order",
         "refund", "fail", "missing", "duplicate", "amount",
-        "reconcil", "cash", "delta", "bank", "how many",
-        "why", "what", "which", "when", "where", "wasn't",
-        "were", "did", "does", "is there", "are there",
+        "reconcil", "cash", "delta", "bank", "charge",
+        "fee", "record", "transaction", "reconcile",
     )
     is_recon_related = any(kw in q_lower for kw in _recon_keywords)
 
     # Check if it's about a specific order
-    ids = _extract_ids(question, {})
+    ids = _extract_ids(question, data or {})
     if ids:
+        # If we have data, check whether the ID is in matched or exceptions
+        if data:
+            mp = data.get("matched", pd.DataFrame())
+            exc = data.get("exceptions", pd.DataFrame())
+            id_set = {i.upper() for i in ids}
+
+            def _has_id(row):
+                vals = [
+                    str(row.get("order_ref", "")).upper(),
+                    str(row.get("payment_id", "")).upper(),
+                    str(row.get("settlement_id", "")).upper(),
+                ]
+                return any(v in id_set for v in vals)
+
+            in_matched = (not mp.empty and mp.apply(_has_id, axis=1).any()) if not mp.empty else False
+            in_exceptions = (not exc.empty and exc.apply(_has_id, axis=1).any()) if not exc.empty else False
+
+            if in_exceptions:
+                return (
+                    f"The order(s) {', '.join(ids)} appear as exceptions in the "
+                    "reconciliation output. Check the Exceptions table above for "
+                    "the reason code and LLM explanation."
+                )
+            if in_matched:
+                return (
+                    f"The order(s) {', '.join(ids)} were found in the matched pairs. "
+                    "Check the Matched Pairs table above for full details."
+                )
+
+        # No data available or ID not found in data — generic response
         if "not matched" in q_lower or "unmatched" in q_lower or "exception" in q_lower:
             return (
                 f"The order(s) {', '.join(ids)} appear as exceptions in the "
@@ -399,7 +429,7 @@ def answer_question(
             )
 
     # Fallback: mock answer
-    return _mock_answer(question, context_text), ids
+    return _mock_answer(question, context_text, data), ids
 
 
 # ---------------------------------------------------------------------------
