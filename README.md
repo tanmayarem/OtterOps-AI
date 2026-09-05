@@ -31,7 +31,7 @@ exception using an LLM — without letting the LLM re-decide any match.
   incomplete.** Matching records one-by-one tells you *which* transactions
   reconciled. The cash position cross-check tells you whether the *totals*
   agree — which is what an actual finance controller cares about. The INR
-  1,675.27 delta is flagged because it exceeds the INR 50 tolerance, and the
+  1,083.65 delta is flagged because it exceeds the INR 50 tolerance, and the
   dashboard explains why (gateway fees + rounding differences).
 
 ## What it does
@@ -63,7 +63,7 @@ exception using an LLM — without letting the LLM re-decide any match.
 | **Matched**                         | **57** |
 | **Match rate**                      | **95.0%** |
 | Exceptions                          | 6      |
-| Cash position delta (internal − bank) | INR 1,675.27 |
+| Cash position delta (internal − bank) | INR 1,083.65 |
 | Cash position status                | FLAGGED (exceeds INR 50 tolerance) |
 
 ### Match types
@@ -87,7 +87,7 @@ exception using an LLM — without letting the LLM re-decide any match.
 
 Sum of matched internal amounts: INR 636,427.24
 Sum of matched bank amounts:     INR 634,751.97
-Delta:                           INR 1,675.27
+Delta:                           INR 1,083.65
 
 The delta exists because 3 gateway-fee records and 2 rounding-diff records have
 bank amounts lower than the internal amounts. These are expected operational
